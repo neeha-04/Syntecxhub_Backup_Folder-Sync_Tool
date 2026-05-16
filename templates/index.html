@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 pb-5">
+
+  <!-- ── Stats Cards ─────────────────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-6 col-lg-3">
+      <div class="stat-card stat-card--blue">
+        <div class="stat-icon"><i class="bi bi-archive-fill"></i></div>
+        <div class="stat-body">
+          <div class="stat-value">{{ stats.total_backups or 0 }}</div>
+          <div class="stat-label">Total Backups</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="stat-card stat-card--green">
+        <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+        <div class="stat-body">
+          <div class="stat-value">{{ stats.successful or 0 }}</div>
+          <div class="stat-label">Successful</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="stat-card stat-card--red">
+        <div class="stat-icon"><i class="bi bi-x-circle-fill"></i></div>
+        <div class="stat-body">
+          <div class="stat-value">{{ stats.failed or 0 }}</div>
+          <div class="stat-label">Failed</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="stat-card stat-card--purple">
+        <div class="stat-icon"><i class="bi bi-hdd-fill"></i></div>
+        <div class="stat-body">
+          <div class="stat-value">{{ (stats.total_bytes_backed_up or 0) | filesize }}</div>
+          <div class="stat-label">Data Backed Up</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /stats -->
+
+  <!-- ── Main Row: Form + Quick Info ───────────────────────────────────── -->
+  <div class="row g-4">
+
+    <!-- Backup Configuration Card -->
+    <div class="col-12 col-xl-7">
+      <div class="card app-card h-100">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-play-circle-fill text-primary"></i>
+          <span class="fw-600">New Backup Job</span>
+        </div>
+        <div class="card-body">
+
+          <!-- Result Alert (hidden until backup runs) -->
+          <div id="backupAlert" class="alert d-none mb-4" role="alert"></div>
+
+          <!-- Backup Form -->
+          <form id="backupForm" novalidate>
+
+            <!-- Source Folder -->
+            <div class="mb-3">
+              <label class="form-label fw-500">
+                <i class="bi bi-folder2-open text-warning me-1"></i>Source Folder
+              </label>
+              <input type="text" class="form-control" id="source" name="source"
+                     placeholder="e.g.  C:\Users\You\Documents  or  /home/you/docs"
+                     required />
+              <div class="form-text">Full path of the folder you want to back up.</div>
+            </div>
+
+            <!-- Destination Folder -->
+            <div class="mb-3">
+              <label class="form-label fw-500">
+                <i class="bi bi-folder-symlink-fill text-info me-1"></i>Destination Folder
+              </label>
+              <input type="text" class="form-control" id="destination" name="destination"
+                     placeholder="e.g.  D:\Backups  or  /mnt/backup"
+                     required />
+              <div class="form-text">Folder where the backup will be created.</div>
+            </div>
+
+            <!-- Options Row -->
+            <div class="row g-3 mb-4">
+              <div class="col-12">
+                <label class="form-label fw-500 mb-2">Backup Options</label>
+                <div class="options-grid">
+
+                  <div class="option-toggle" id="opt-compress">
+                    <input class="option-checkbox" type="checkbox" id="compress" name="compress" checked />
+                    <label class="option-label" for="compress">
+                      <i class="bi bi-file-zip-fill text-warning"></i>
+                      <span class="opt-title">ZIP Compress</span>
+                      <span class="opt-desc">Pack backup into a .zip file</span>
+                    </label>
+                  </div>
+
+                  <div class="option-toggle" id="opt-incremental">
+                    <input class="option-checkbox" type="checkbox" id="incremental" name="incremental" />
+                    <label class="option-label" for="incremental">
+                      <i class="bi bi-arrow-repeat text-success"></i>
+                      <span class="opt-title">Incremental</span>
+                      <span class="opt-desc">Copy only changed files</span>
+                    </label>
+                  </div>
+
+                  <div class="option-toggle" id="opt-dryrun">
+                    <input class="option-checkbox" type="checkbox" id="dry_run" name="dry_run" />
+                    <label class="option-label" for="dry_run">
+                      <i class="bi bi-eye-fill text-purple"></i>
+                      <span class="opt-title">Dry Run</span>
+                      <span class="opt-desc">Simulate without copying</span>
+                    </label>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary px-4" id="startBtn">
+                <i class="bi bi-play-fill me-2"></i>Start Backup
+              </button>
+              <button type="reset" class="btn btn-outline-secondary px-3">
+                <i class="bi bi-x-circle me-1"></i>Clear
+              </button>
+            </div>
+
+          </form>
+
+          <!-- Progress Bar (hidden until backup starts) -->
+          <div id="progressSection" class="mt-4 d-none">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="fw-500 small" id="progressLabel">Starting backup…</span>
+              <span class="small text-muted" id="progressTime"></span>
+            </div>
+            <div class="progress" style="height: 8px;">
+              <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                   id="progressBar" style="width: 100%"></div>
+            </div>
+          </div>
+
+        </div><!-- /card-body -->
+      </div><!-- /card -->
+    </div>
+
+    <!-- Right Column -->
+    <div class="col-12 col-xl-5 d-flex flex-column gap-4">
+
+      <!-- Quick Cleanup Card -->
+      <div class="card app-card">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-trash3-fill text-danger"></i>
+          <span class="fw-600">Auto Cleanup</span>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Keep only the N most recent backups in a destination folder.
+            Older ZIP files will be permanently deleted.
+          </p>
+          <div id="cleanupAlert" class="alert d-none mb-3" role="alert"></div>
+          <div class="row g-2">
+            <div class="col-12">
+              <input type="text" class="form-control" id="cleanupDest"
+                     placeholder="Backup destination folder path" />
+            </div>
+            <div class="col-7">
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-hash"></i></span>
+                <input type="number" class="form-control" id="keepLast"
+                       value="5" min="1" max="100" />
+                <span class="input-group-text">to keep</span>
+              </div>
+            </div>
+            <div class="col-5">
+              <button class="btn btn-danger w-100" id="cleanupBtn">
+                <i class="bi bi-trash3 me-1"></i>Cleanup
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Backups Card -->
+      <div class="card app-card flex-grow-1">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-clock-history text-secondary"></i>
+            <span class="fw-600">Recent Backups</span>
+          </div>
+          <a href="{{ url_for('history') }}" class="btn btn-sm btn-ghost text-primary">
+            View All <i class="bi bi-arrow-right"></i>
+          </a>
+        </div>
+        <div class="card-body p-0">
+          {% if recent_backups %}
+            <div class="list-group list-group-flush">
+              {% for b in recent_backups %}
+              <a href="{{ url_for('backup_detail', backup_id=b.id) }}"
+                 class="list-group-item list-group-item-action px-4 py-3">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <div class="fw-500 small">{{ b.backup_name }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">
+                      {{ b.started_at | datefmt }}
+                    </div>
+                  </div>
+                  <span class="badge rounded-pill
+                    {% if b.status == 'success' %}bg-success-subtle text-success
+                    {% elif b.status == 'failed' %}bg-danger-subtle text-danger
+                    {% elif b.status == 'dry_run' %}bg-warning-subtle text-warning
+                    {% else %}bg-secondary-subtle text-secondary{% endif %}">
+                    {{ b.status | upper }}
+                  </span>
+                </div>
+              </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state py-4">
+              <i class="bi bi-inbox fs-1 text-muted"></i>
+              <p class="text-muted mt-2 mb-0 small">No backups yet. Start your first backup!</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div><!-- /right col -->
+  </div><!-- /main row -->
+
+  <!-- ── Backup Result Modal ─────────────────────────────────────────────── -->
+  <div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header" id="modalHeader">
+          <h5 class="modal-title" id="modalTitle">Backup Complete</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="modalBody"></div>
+        </div>
+        <div class="modal-footer">
+          <a href="{{ url_for('history') }}" class="btn btn-outline-primary">
+            <i class="bi bi-clock-history me-1"></i>View History
+          </a>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

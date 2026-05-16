@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Backup History{% endblock %}
+{% block page_title %}Backup History{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 pb-5">
+
+  <div class="card app-card">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-clock-history text-primary"></i>
+        <span class="fw-600">All Backup Jobs</span>
+        <span class="badge bg-primary-subtle text-primary rounded-pill">{{ backups | length }}</span>
+      </div>
+      <!-- Search -->
+      <input type="text" class="form-control form-control-sm w-auto"
+             id="historySearch" placeholder="🔍  Filter by name or status…" style="min-width:220px"/>
+    </div>
+
+    <div class="card-body p-0">
+      {% if backups %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="historyTable">
+          <thead>
+            <tr>
+              <th class="ps-4">#</th>
+              <th>Backup Name</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Files</th>
+              <th>Size</th>
+              <th>Duration</th>
+              <th>Date</th>
+              <th class="text-end pe-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in backups %}
+            <tr class="history-row">
+              <td class="ps-4 text-muted small">{{ b.id }}</td>
+              <td>
+                <a href="{{ url_for('backup_detail', backup_id=b.id) }}"
+                   class="fw-500 text-decoration-none text-body">
+                  <i class="bi bi-archive me-1 text-primary"></i>
+                  {{ b.backup_name }}
+                </a>
+                <div class="text-muted" style="font-size:0.72rem;">{{ b.source_path | truncate(40) }}</div>
+              </td>
+              <td>
+                <span class="badge rounded-pill
+                  {% if b.backup_type == 'incremental' %}bg-info-subtle text-info
+                  {% else %}bg-secondary-subtle text-secondary{% endif %}">
+                  {{ b.backup_type | capitalize }}
+                </span>
+              </td>
+              <td>
+                <span class="badge rounded-pill
+                  {% if b.status == 'success' %}bg-success-subtle text-success
+                  {% elif b.status == 'failed' %}bg-danger-subtle text-danger
+                  {% elif b.status == 'dry_run' %}bg-warning-subtle text-warning
+                  {% else %}bg-secondary-subtle text-secondary{% endif %}">
+                  <i class="bi
+                    {% if b.status == 'success' %}bi-check-circle
+                    {% elif b.status == 'failed' %}bi-x-circle
+                    {% elif b.status == 'dry_run' %}bi-eye
+                    {% else %}bi-hourglass{% endif %} me-1"></i>
+                  {{ b.status | upper }}
+                </span>
+              </td>
+              <td>
+                <span class="text-success">{{ b.copied_files }}✓</span>
+                <span class="text-muted mx-1">/</span>
+                <span class="text-warning">{{ b.skipped_files }}⟳</span>
+                <span class="text-muted mx-1">/</span>
+                <span class="text-danger">{{ b.failed_files }}✗</span>
+                <div class="text-muted" style="font-size:0.72rem;">of {{ b.total_files }} total</div>
+              </td>
+              <td class="small">{{ b.total_size_bytes | filesize }}</td>
+              <td class="small text-muted">{{ b.duration_seconds }}s</td>
+              <td class="small text-muted">{{ b.started_at | datefmt }}</td>
+              <td class="text-end pe-3">
+                <div class="d-flex gap-1 justify-content-end">
+
+                  <!-- View Detail -->
+                  <a href="{{ url_for('backup_detail', backup_id=b.id) }}"
+                     class="btn btn-sm btn-ghost" title="View Details">
+                    <i class="bi bi-eye"></i>
+                  </a>
+
+                  <!-- Download ZIP -->
+                  {% if b.zip_path %}
+                  <a href="{{ url_for('download_backup', backup_id=b.id) }}"
+                     class="btn btn-sm btn-ghost text-primary" title="Download ZIP">
+                    <i class="bi bi-download"></i>
+                  </a>
+                  {% endif %}
+
+                  <!-- Restore -->
+                  {% if b.zip_path %}
+                  <button class="btn btn-sm btn-ghost text-success restore-btn"
+                          title="Restore Backup"
+                          data-id="{{ b.id }}"
+                          data-name="{{ b.backup_name }}">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                  </button>
+                  {% endif %}
+
+                  <!-- Delete -->
+                  <button class="btn btn-sm btn-ghost text-danger delete-btn"
+                          title="Delete Backup"
+                          data-id="{{ b.id }}"
+                          data-name="{{ b.backup_name }}">
+                    <i class="bi bi-trash3"></i>
+                  </button>
+
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div><!-- /table-responsive -->
+      {% else %}
+        <div class="empty-state py-5">
+          <i class="bi bi-inbox fs-1 text-muted"></i>
+          <p class="text-muted mt-3">No backup jobs found.</p>
+          <a href="{{ url_for('index') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Create First Backup
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Restore Modal ───────────────────────────────────────────────────────── -->
+<div class="modal fade" id="restoreModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2 text-success"></i>Restore Backup</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="restoreAlert" class="alert d-none mb-3"></div>
+        <p class="text-muted small">Restoring: <strong id="restoreName"></strong></p>
+        <label class="form-label fw-500">Restore Destination Path</label>
+        <input type="text" class="form-control" id="restorePath"
+               placeholder="e.g. C:\Restored or /home/you/restored" />
+        <div class="form-text">Files will be extracted to this folder.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="confirmRestoreBtn">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ───────────────────────────────────────────────── -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger-subtle">
+        <h5 class="modal-title text-danger">
+          <i class="bi bi-exclamation-triangle me-2"></i>Delete Backup
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete <strong id="deleteName"></strong>?</p>
+        <p class="text-danger small mb-0">This will permanently delete the backup files from disk.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+          <i class="bi bi-trash3 me-1"></i>Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+{% endblock %}
